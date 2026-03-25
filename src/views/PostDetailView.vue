@@ -36,9 +36,9 @@ const post = computed(() => {
 <style scoped lang="scss">
 .post-detail,
 .post-empty {
-    width: min(860px, 100%);
+    width: min(980px, 100%);
     margin: 0 auto;
-    padding: 28px;
+    padding: 36px;
     border-radius: 28px;
     border: 1px solid rgba(148, 163, 184, 0.18);
     background: rgba(255, 255, 255, 0.88);
@@ -99,16 +99,17 @@ const post = computed(() => {
     }
 
     &__content {
-        padding-top: 32px;
+        padding-top: 36px;
         color: #1e293b;
-        font-size: 1.02rem;
-        line-height: 1.9;
+        font-size: 1.1rem;
+        line-height: 2;
         overflow-wrap: anywhere;
 
         :deep(h2) {
-            margin: 32px 0 14px;
+            margin: 36px 0 16px;
             color: #0f172a;
-            font-size: 1.55rem;
+            font-size: 1.75rem;
+            line-height: 1.35;
         }
 
         :deep(p),
@@ -116,7 +117,7 @@ const post = computed(() => {
         :deep(ol),
         :deep(blockquote),
         :deep(figure) {
-            margin: 16px 0;
+            margin: 18px 0;
         }
 
         :deep(ul),
@@ -125,7 +126,7 @@ const post = computed(() => {
         }
 
         :deep(blockquote) {
-            padding: 16px 18px;
+            padding: 18px 22px;
             border-left: 4px solid #cbd5e1;
             background: #f8fafc;
             color: #334155;
@@ -133,18 +134,36 @@ const post = computed(() => {
         }
 
         :deep(code) {
-            padding: 2px 6px;
-            border-radius: 6px;
+            padding: 0.18em 0.5em;
+            border: 1px solid rgba(37, 99, 235, 0.14);
+            border-radius: 8px;
             background: #eff6ff;
             color: #1d4ed8;
+            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+            font-size: 0.92em;
+        }
+
+        :deep(pre) {
+            margin: 22px 0;
+            padding: 18px 22px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 18px;
+            background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+            overflow: auto;
+            color: #e2e8f0;
+            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+            font-size: 0.95rem;
+            line-height: 1.8;
+            white-space: pre-wrap;
         }
 
         :deep(img) {
             display: block;
-            max-width: min(100%, 760px);
+            max-width: min(100%, 860px);
             width: auto;
             height: auto;
-            margin: 24px auto;
+            margin: 28px auto;
             border-radius: 18px;
         }
     }
@@ -175,6 +194,21 @@ const post = computed(() => {
 
         &:hover {
             color: #2563eb;
+        }
+    }
+}
+
+@media (max-width: 720px) {
+
+    .post-detail,
+    .post-empty {
+        padding: 24px;
+    }
+
+    .post-detail {
+        &__content {
+            font-size: 1.02rem;
+            line-height: 1.9;
         }
     }
 }

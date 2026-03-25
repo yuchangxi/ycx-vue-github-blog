@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
+import { useRoute } from 'vue-router'
 import { QuillEditor } from '@vueup/vue-quill'
+
+import { blogPosts } from '@/data/blog-posts'
 
 type QuillEditorInstance = InstanceType<typeof QuillEditor>
 
 const title = ref('')
 const summary = ref('')
 const tagsInput = ref('Vue, 博客')
+const publishedAt = ref(new Date().toISOString().slice(0, 10))
+const readingTime = ref('5 分钟')
 const editorContent = ref('<p>在这里开始撰写正文内容...</p>')
 const imagePathInput = ref('/blog-images/example-cover.svg')
 const editorRef = shallowRef<QuillEditorInstance | null>(null)
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
+const route = useRoute()
 
 const resolvePublicAssetPath = (source: string) => {
     if (!source.startsWith('/')) {
@@ -126,8 +132,66 @@ const initializeToolbarHandler = async () => {
     toolbar?.addHandler?.('image', handleToolbarImage)
 }
 
-onMounted(() => {
-    initializeToolbarHandler()
+const selectedPostId = ref('')
+
+const editablePosts = computed(() => {
+    return [...blogPosts].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
+})
+
+const selectedPost = computed(() => {
+    return editablePosts.value.find((item) => item.id === selectedPostId.value) ?? null
+})
+
+const applyPostToEditor = async (post: {
+    id: string
+    title: string
+    summary: string
+    tags: string[]
+    publishedAt: string
+    readingTime: string
+    content: string
+}) => {
+    title.value = post.title
+    summary.value = post.summary
+    tagsInput.value = post.tags.join(', ')
+    publishedAt.value = post.publishedAt
+    readingTime.value = post.readingTime
+    editorContent.value = normalizeHtmlContent(post.content)
+
+    await nextTick()
+
+    const quill = editorRef.value?.getQuill()
+
+    if (!quill) {
+        return
+    }
+
+    quill.setContents([])
+    quill.clipboard.dangerouslyPasteHTML(normalizeHtmlContent(post.content), 'api')
+    editorContent.value = normalizeHtmlContent(quill.root.innerHTML)
+    quill.setSelection(quill.getLength(), 0, 'api')
+}
+
+const loadSelectedPost = async () => {
+    if (!selectedPost.value) {
+        return
+    }
+
+    await applyPostToEditor(selectedPost.value)
+}
+
+onMounted(async () => {
+    await initializeToolbarHandler()
+
+    const routePostId = typeof route.query.post === 'string' ? route.query.post : ''
+    const initialPost = editablePosts.value.find((item) => item.id === routePostId)
+
+    if (!initialPost) {
+        return
+    }
+
+    selectedPostId.value = initialPost.id
+    await applyPostToEditor(initialPost)
 })
 
 const generatedPostObject = computed(() => {
@@ -147,8 +211,8 @@ const generatedPostObject = computed(() => {
   title: '${title.value || '文章标题'}',
   summary: '${summary.value || '文章摘要'}',
   tags: ${JSON.stringify(tags)},
-  publishedAt: '${new Date().toISOString().slice(0, 10)}',
-  readingTime: '5 分钟',
+  publishedAt: '${publishedAt.value || new Date().toISOString().slice(0, 10)}',
+  readingTime: '${readingTime.value || '5 分钟'}',
   content: ${JSON.stringify(normalizedEditorContent.value)},
 }`
 })
@@ -175,7 +239,27 @@ const generatedPostObject = computed(() => {
             <div class="editor-panel editor-form">
                 <div class="editor-panel__head">
                     <p class="editor-panel__label">编辑区</p>
-                    <p class="editor-panel__hint">扩大正文编辑区域，适合长文和图片内容录入。</p>
+                    <p class="editor-panel__hint">支持新建文章，也支持加载历史文章继续编辑。</p>
+                </div>
+
+                <div class="editor-field editor-field--load-post">
+                    <span>继续编辑历史文章</span>
+                    <div class="load-post-helper">
+                        <select v-model="selectedPostId">
+                            <option value="">请选择一篇历史文章</option>
+                            <option v-for="post in editablePosts" :key="post.id" :value="post.id">
+                                {{ post.publishedAt }}｜{{ post.title }}
+                            </option>
+                        </select>
+                        <button type="button" class="load-post-helper__button" :disabled="!selectedPostId"
+                            @click="loadSelectedPost">
+                            加载到编辑器
+                        </button>
+                    </div>
+                    <p class="editor-field__tip">
+                        载入后会自动回填标题、摘要、标签与正文 HTML，可直接继续修改；也支持通过
+                        <code>/editor?post=文章ID</code> 直接打开指定文章。
+                    </p>
                 </div>
 
                 <label class="editor-field">
@@ -187,6 +271,18 @@ const generatedPostObject = computed(() => {
                     <span>文章摘要</span>
                     <textarea v-model="summary" rows="4" placeholder="请输入摘要，用于首页列表展示"></textarea>
                 </label>
+
+                <div class="editor-inline-fields">
+                    <label class="editor-field">
+                        <span>发布日期</span>
+                        <input v-model="publishedAt" type="date" />
+                    </label>
+
+                    <label class="editor-field">
+                        <span>阅读时长</span>
+                        <input v-model="readingTime" type="text" placeholder="例如 5 分钟" />
+                    </label>
+                </div>
 
                 <label class="editor-field">
                     <span>标签（英文逗号分隔）</span>
@@ -316,7 +412,7 @@ const generatedPostObject = computed(() => {
 
 .editor-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
+    grid-template-columns: minmax(0, 1.7fr) minmax(420px, 1fr);
     gap: 24px;
     align-items: start;
 }
@@ -356,6 +452,13 @@ const generatedPostObject = computed(() => {
 .editor-form {
     display: grid;
     gap: 18px;
+    min-width: 0;
+}
+
+.editor-inline-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
 }
 
 .editor-field {
@@ -369,7 +472,8 @@ const generatedPostObject = computed(() => {
     }
 
     input,
-    textarea {
+    textarea,
+    select {
         width: 100%;
         border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: 16px;
@@ -378,6 +482,7 @@ const generatedPostObject = computed(() => {
         color: #0f172a;
         outline: none;
         resize: vertical;
+        background: #fff;
     }
 
     code {
@@ -388,7 +493,8 @@ const generatedPostObject = computed(() => {
     }
 
     input:focus,
-    textarea:focus {
+    textarea:focus,
+    select:focus {
         border-color: #0f172a;
         box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.06);
     }
@@ -400,6 +506,7 @@ const generatedPostObject = computed(() => {
         font-size: 0.88rem;
     }
 
+    &--load-post,
     &--image-helper {
         padding: 16px;
         border-radius: 20px;
@@ -431,17 +538,54 @@ const generatedPostObject = computed(() => {
         }
 
         :deep(.ql-container.ql-snow) {
-            min-height: 760px;
+            min-height: 820px;
             border: none;
-            font-size: 1rem;
+            font-size: 1.05rem;
             background: #fff;
         }
 
         :deep(.ql-editor) {
-            min-height: 720px;
-            padding: 24px 28px;
-            line-height: 1.9;
-            font-size: 1rem;
+            min-height: 780px;
+            padding: 28px 32px;
+            line-height: 1.95;
+            font-size: 1.05rem;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+
+            .ql-code-block-container {
+                margin: 22px 0;
+                border: 1px solid rgba(15, 23, 42, 0.12);
+                border-radius: 18px;
+                background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+                box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+                overflow: hidden;
+            }
+
+            .ql-code-block-container .ql-code-block {
+                padding: 0 22px;
+                font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+                font-size: 0.95rem;
+                line-height: 1.8;
+                color: #e2e8f0;
+            }
+
+            .ql-code-block-container .ql-code-block:first-child {
+                padding-top: 18px;
+            }
+
+            .ql-code-block-container .ql-code-block:last-child {
+                padding-bottom: 18px;
+            }
+
+            code {
+                padding: 0.18em 0.5em;
+                border: 1px solid rgba(37, 99, 235, 0.14);
+                border-radius: 8px;
+                background: #eff6ff;
+                color: #1d4ed8;
+                font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+                font-size: 0.92em;
+            }
 
             img {
                 display: block;
@@ -477,6 +621,7 @@ const generatedPostObject = computed(() => {
     }
 }
 
+.load-post-helper,
 .image-helper {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -491,9 +636,15 @@ const generatedPostObject = computed(() => {
         color: #fff;
         cursor: pointer;
         font-size: 0.92rem;
+        white-space: nowrap;
 
         &:hover {
             background: #1e293b;
+        }
+
+        &:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
         }
     }
 }
@@ -502,6 +653,7 @@ const generatedPostObject = computed(() => {
     display: grid;
     gap: 22px;
     align-content: start;
+    min-height: 820px;
 
     &__label {
         margin: 0 0 8px;
@@ -540,16 +692,58 @@ const generatedPostObject = computed(() => {
     }
 
     &__content {
+        min-width: 0;
         padding-top: 8px;
         border-top: 1px solid rgba(148, 163, 184, 0.18);
         color: #1e293b;
-        line-height: 1.9;
+        font-size: 1.03rem;
+        line-height: 1.95;
+        white-space: normal;
+        word-break: break-word;
         overflow-wrap: anywhere;
 
         :deep(h1),
         :deep(h2),
         :deep(h3) {
             color: #0f172a;
+            line-height: 1.28;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        :deep(p),
+        :deep(ul),
+        :deep(ol),
+        :deep(blockquote),
+        :deep(pre) {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        :deep(code) {
+            padding: 0.18em 0.5em;
+            border: 1px solid rgba(37, 99, 235, 0.14);
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+            font-size: 0.92em;
+        }
+
+        :deep(pre) {
+            margin: 22px 0;
+            padding: 18px 22px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 18px;
+            background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+            overflow: auto;
+            white-space: pre-wrap;
+            color: #e2e8f0;
+            font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+            font-size: 0.95rem;
+            line-height: 1.8;
         }
 
         :deep(img) {
@@ -585,14 +779,18 @@ const generatedPostObject = computed(() => {
         position: static;
     }
 
+    .preview-panel {
+        min-height: auto;
+    }
+
     .editor-field {
         &--richtext {
             :deep(.ql-container.ql-snow) {
-                min-height: 620px;
+                min-height: 680px;
             }
 
             :deep(.ql-editor) {
-                min-height: 580px;
+                min-height: 640px;
             }
         }
     }
@@ -611,6 +809,9 @@ const generatedPostObject = computed(() => {
 }
 
 @media (max-width: 720px) {
+
+    .editor-inline-fields,
+    .load-post-helper,
     .image-helper {
         grid-template-columns: 1fr;
     }

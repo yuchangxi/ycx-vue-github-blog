@@ -14,6 +14,16 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: isGithubPagesBuild ? `/${repositoryName}/` : '/',
+    server: {
+      // 是否监听所有地址
+      host: true,
+      // 端口号
+      port: 5173,
+      // 端口被占用时，是否直接退出
+      strictPort: false,
+      // 是否自动打开浏览器
+      open: true,
+    },
     plugins: [vue(), vueJsx(), vueDevTools()],
     resolve: {
       alias: {
