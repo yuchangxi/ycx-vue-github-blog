@@ -40,3 +40,11 @@ pnpm dev
 ```sh
 pnpm build
 ```
+
+### Build for GitHub Pages
+
+项目通过 [`vite.config.ts`](vite.config.ts) 使用 Vite 的 [`loadEnv()`](vite.config.ts:12) 读取 [`.env.github-pages`](.env.github-pages) 中的 `VITE_GITHUB_PAGES` 变量。
+
+```sh
+pnpm build:pages
+```
