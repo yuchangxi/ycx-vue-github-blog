@@ -1,0 +1,17 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="40" fill="#F8FAFC"/>
+  <rect x="48" y="48" width="1104" height="624" rx="28" fill="url(#paint0_linear_1_1)"/>
+  <circle cx="252" cy="232" r="96" fill="rgba(255,255,255,0.28)"/>
+  <circle cx="936" cy="496" r="132" fill="rgba(255,255,255,0.16)"/>
+  <path d="M172 500L356 338L490 442L680 250L858 406L1012 280V580H172V500Z" fill="rgba(255,255,255,0.34)"/>
+  <text x="110" y="138" fill="white" font-size="34" font-family="Inter, Arial, sans-serif" letter-spacing="4">VUE GITHUB BLOG</text>
+  <text x="110" y="236" fill="white" font-size="88" font-weight="700" font-family="Inter, Arial, sans-serif">Blog Cover</text>
+  <text x="110" y="302" fill="rgba(255,255,255,0.92)" font-size="30" font-family="Inter, Arial, sans-serif">Place your article images in public/blog-images</text>
+  <text x="110" y="354" fill="rgba(255,255,255,0.92)" font-size="30" font-family="Inter, Arial, sans-serif">and reference them with /blog-images/filename.ext</text>
+  <defs>
+    <linearGradient id="paint0_linear_1_1" x1="96" y1="72" x2="1092" y2="648" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+</svg>
