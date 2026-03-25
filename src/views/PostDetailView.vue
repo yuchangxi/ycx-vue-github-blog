@@ -5,9 +5,62 @@ import { RouterLink, useRoute } from 'vue-router'
 import { blogPosts } from '@/data/blog-posts'
 
 const route = useRoute()
+const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+const resolvePublicAssetPath = (source: string) => {
+    if (!source.startsWith('/')) {
+        return source
+    }
+
+    return baseUrl ? `${baseUrl}${source}` : source
+}
+
+const normalizeImageSource = (source: string) => {
+    const trimmedSource = source.trim()
+
+    if (!trimmedSource) {
+        return ''
+    }
+
+    if (trimmedSource.startsWith('data:') || trimmedSource.startsWith('blob:')) {
+        return trimmedSource
+    }
+
+    if (trimmedSource.startsWith('http://') || trimmedSource.startsWith('https://')) {
+        try {
+            const currentOrigin = window.location.origin
+            const url = new URL(trimmedSource, currentOrigin)
+
+            if (url.origin === currentOrigin) {
+                return resolvePublicAssetPath(`${url.pathname}${url.search}${url.hash}`)
+            }
+
+            return trimmedSource
+        } catch {
+            return trimmedSource
+        }
+    }
+
+    if (trimmedSource.startsWith('/')) {
+        return resolvePublicAssetPath(trimmedSource)
+    }
+
+    return resolvePublicAssetPath(`/${trimmedSource.replace(/^\.\//, '')}`)
+}
+
+const normalizeHtmlContent = (html: string) => {
+    return html.replace(/src=("|')([^"']+)(\1)/g, (_match, quote: string, src: string) => {
+        const normalizedSource = normalizeImageSource(src)
+        return `src=${quote}${normalizedSource}${quote}`
+    })
+}
 
 const post = computed(() => {
     return blogPosts.find((item) => item.id === route.params.id)
+})
+
+const normalizedPostContent = computed(() => {
+    return post.value ? normalizeHtmlContent(post.value.content) : ''
 })
 </script>
 
@@ -23,7 +76,7 @@ const post = computed(() => {
             </div>
         </header>
 
-        <section class="post-detail__content" v-html="post.content"></section>
+        <section class="post-detail__content" v-html="normalizedPostContent"></section>
     </article>
 
     <section v-else class="post-empty">
