@@ -215,4 +215,99 @@ export const posts202603: BlogPost[] = [
       <p>业务页面仍然只依赖一个聚合导出，既不增加页面复杂度，也方便未来重构。</p>
     `,
   },
+  {
+    id: 'how-gzip-and-brotli-work-in-frontend-deployment',
+    title: '前端部署中的 gzip 与 br 压缩：构建、Nginx 与验证方法',
+    summary:
+      '梳理 gzip 与 Brotli 在前端静态资源场景中的作用边界，说明何时由服务器压缩、何时使用预压缩文件，以及 Nginx 应如何配置。',
+    tags: ['性能优化', 'gzip', 'Brotli', 'Nginx'],
+    publishedAt: '2026-03-30',
+    readingTime: '8 分钟',
+    content: `
+      <h2>为什么前端项目总会提到压缩</h2>
+      <p>前端页面最终交付给浏览器的核心资源通常是 HTML、CSS、JavaScript、JSON 和 SVG。这些文本类内容如果直接传输，体积往往偏大，而 gzip 与 br 的目标就是在传输阶段减小体积，降低下载时间。</p>
+      <p>需要注意的是，压缩发生在“网络响应”这一层，而不是业务代码层。也就是说，浏览器拿到的依然是同一份资源，只是传输时被压缩了，解压工作由浏览器自动完成。</p>
+      <h2>gzip 和 br 的区别</h2>
+      <p>gzip 是使用历史更久、兼容性极强的压缩方式，几乎所有服务器和客户端都支持。br 指的是 Brotli，通常对 JavaScript、CSS、HTML 这类文本内容有更高的压缩率，因此现代浏览器往往更偏向使用 <code>br</code>。</p>
+      <blockquote>对前端静态资源来说，常见策略不是“二选一”，而是同时提供 gzip 和 br，让浏览器按自身能力协商选择。</blockquote>
+      <h2>前端项目需要做什么</h2>
+      <p>这里最容易混淆的点是：前端构建工具并不直接决定线上是否启用压缩。真正决定浏览器拿到 <code>Content-Encoding: gzip</code> 还是 <code>Content-Encoding: br</code> 的，是服务器或 CDN。</p>
+      <p>前端项目主要做两类事情：</p>
+      <ul>
+        <li>尽量生成更小的构建产物，例如合理拆包、移除无用代码、压缩资源。</li>
+        <li>在构建阶段额外生成 <code>.gz</code> 和 <code>.br</code> 预压缩文件，供支持的服务器直接返回。</li>
+      </ul>
+      <h2>运行时压缩与预压缩</h2>
+      <p>运行时压缩指的是服务器在收到请求后，现场把 <code>index.js</code> 压缩成 gzip 或 br 再返回。这种方式配置简单，但每次请求都会消耗一定 CPU。</p>
+      <p>预压缩则是在构建阶段提前生成 <code>index.js.gz</code> 或 <code>index.js.br</code>。当浏览器请求 <code>index.js</code> 时，服务器如果发现对应的预压缩文件存在，就可以直接返回它，从而减少运行时开销。</p>
+      <h2>Vite 场景如何生成预压缩文件</h2>
+      <p>在 Vue + Vite 项目中，常见做法是使用 <code>vite-plugin-compression</code>。这样构建后除了原始资源外，还会多出对应的 <code>.gz</code> 或 <code>.br</code> 文件。</p>
+      <pre><code>import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import viteCompression from 'vite-plugin-compression'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    viteCompression({
+      algorithm: 'gzip',
+      ext: '.gz',
+      threshold: 10240,
+    }),
+    viteCompression({
+      algorithm: 'brotliCompress',
+      ext: '.br',
+      threshold: 10240,
+    }),
+  ],
+})</code></pre>
+      <p>这段配置的含义很直接：构建时为大于 10KB 的资源额外生成 gzip 与 Brotli 版本，但原始文件仍然保留。</p>
+      <h2>Nginx 运行时 gzip 配置</h2>
+      <p>如果你的站点部署在自己的 Nginx 服务器上，最简单的方式是先启用运行时 gzip：</p>
+      <pre><code>gzip on;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_vary on;
+gzip_proxied any;
+gzip_types
+  text/plain
+  text/css
+  text/xml
+  text/javascript
+  application/javascript
+  application/json
+  application/xml
+  application/rss+xml
+  image/svg+xml
+  text/html;</code></pre>
+      <p>这套配置适合大多数基础场景。服务器会根据浏览器发送的 <code>Accept-Encoding</code> 头，决定是否返回 gzip 压缩内容。</p>
+      <h2>Nginx 预压缩 gzip 与 br 配置</h2>
+      <p>如果你已经在构建阶段生成了 <code>.gz</code> 与 <code>.br</code> 文件，更推荐让 Nginx 直接使用这些文件：</p>
+      <pre><code>gzip on;
+gzip_static on;
+gzip_vary on;
+gzip_types text/plain text/css application/javascript application/json image/svg+xml text/html;
+
+brotli on;
+brotli_static on;
+brotli_comp_level 5;
+brotli_min_length 1024;
+brotli_types text/plain text/css application/javascript application/json image/svg+xml text/html;</code></pre>
+      <p>其中 <code>gzip_static on</code> 表示优先返回同名的 <code>.gz</code> 文件，<code>brotli_static on</code> 则表示优先返回 <code>.br</code> 文件。需要注意，Brotli 往往依赖额外的 Nginx 模块支持，并不是所有环境默认都能直接使用。</p>
+      <h2>哪些资源适合压缩</h2>
+      <p>适合压缩的通常是文本类资源，例如 HTML、CSS、JavaScript、JSON 和 SVG。像 JPG、PNG、WebP、MP4、ZIP 这类本身已经经过压缩的二进制文件，一般不需要再次启用 gzip 或 br。</p>
+      <h2>如何验证是否真的生效</h2>
+      <p>验证压缩是否成功，不能只看构建目录中有没有 <code>.gz</code> 或 <code>.br</code> 文件，更关键的是看实际响应头。</p>
+      <ol>
+        <li>打开浏览器开发者工具，在 Network 面板中查看具体资源请求。</li>
+        <li>检查响应头里是否存在 <code>Content-Encoding: gzip</code> 或 <code>Content-Encoding: br</code>。</li>
+        <li>也可以使用命令行执行 <code>curl --compressed -I https://your-domain.com/assets/index.js</code> 进行确认。</li>
+      </ol>
+      <p>只有当响应头明确返回了对应的 <code>Content-Encoding</code>，才能说明线上压缩真正生效。</p>
+      <h2>静态托管平台要单独看待</h2>
+      <p>像 GitHub Pages 这样的静态托管平台，压缩通常由平台自身的 CDN 负责。即使你的项目没有显式生成 <code>.gz</code> 或 <code>.br</code> 文件，平台也可能自动返回压缩后的响应。因此这类场景下，是否成功主要看平台的实际响应，而不是只看前端构建配置。</p>
+      <h2>适合前端项目的实践建议</h2>
+      <p>如果只是普通博客或中小型站点，开启 Nginx 运行时 gzip 已经足够。如果是更重视性能的静态站点，推荐构建阶段同时生成 <code>.gz</code> 与 <code>.br</code>，再让 Nginx 通过静态压缩文件直接响应。这样既能保持兼容性，也能让现代浏览器优先获得更小的 Brotli 资源。</p>
+    `,
+  },
 ]
