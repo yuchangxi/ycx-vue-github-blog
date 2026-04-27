@@ -3,8 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { blogPosts } from '@/data/blog-posts'
+import type { BlogFilter } from '@/types/blog'
 
+const categoryOptions: BlogFilter[] = ['全部', '前端', '后端', '其他']
 const searchKeyword = ref('')
+const activeCategory = ref<BlogFilter>('全部')
 // 当前已渲染的文章数量；首页初次只展示首批数据，后续通过无限滚动逐步增加。
 const visibleCount = ref(3)
 // 每次触底后新增加载的文章数量。
@@ -17,17 +20,18 @@ const sortedPosts = [...blogPosts].sort((a, b) => {
 })
 
 const hasActiveSearch = computed(() => searchKeyword.value.trim().length > 0)
+const hasActiveCategoryFilter = computed(() => activeCategory.value !== '全部')
+const hasActiveFilter = computed(() => hasActiveSearch.value || hasActiveCategoryFilter.value)
 
 const filteredPosts = computed(() => {
     const keyword = searchKeyword.value.trim().toLowerCase()
 
-    if (!keyword) {
-        return sortedPosts
-    }
-
     return sortedPosts.filter((post) => {
+        const matchesCategory = activeCategory.value === '全部' || post.category === activeCategory.value
         const searchableText = [post.title, post.summary, post.tags.join(' ')].join(' ').toLowerCase()
-        return searchableText.includes(keyword)
+        const matchesKeyword = !keyword || searchableText.includes(keyword)
+
+        return matchesCategory && matchesKeyword
     })
 })
 
@@ -42,13 +46,14 @@ const loadMore = () => {
     visibleCount.value = Math.min(visibleCount.value + batchSize, filteredPosts.value.length)
 }
 
-const resetSearch = () => {
+const resetFilters = () => {
     searchKeyword.value = ''
+    activeCategory.value = '全部'
     visibleCount.value = batchSize
 }
 
-// 搜索词变化时，重置展示数量，避免沿用旧的滚动进度导致筛选结果显示异常。
-watch(searchKeyword, () => {
+// 搜索词或分类变化时，重置展示数量，避免沿用旧的滚动进度导致筛选结果显示异常。
+watch([searchKeyword, activeCategory], () => {
     visibleCount.value = batchSize
 })
 
@@ -105,16 +110,33 @@ onBeforeUnmount(() => {
     <section class="toolbar-card">
         <div class="toolbar-card__meta">
             <strong>{{ filteredPosts.length }}</strong>
-            <span>{{ hasActiveSearch ? '篇筛选结果' : '篇可浏览文章' }}</span>
+            <span>{{ hasActiveFilter ? '篇筛选结果' : '篇可浏览文章' }}</span>
         </div>
-        <div class="toolbar-card__actions">
-            <label class="search-box">
-                <span class="search-box__label">搜索</span>
-                <input v-model="searchKeyword" class="search-box__input" type="text" placeholder="按标题、摘要或标签检索文章" />
-            </label>
-            <button v-if="hasActiveSearch" class="toolbar-card__reset" type="button" @click="resetSearch">
-                清空筛选
-            </button>
+        <div class="toolbar-card__filters">
+            <div class="category-filter">
+                <span class="category-filter__label">标签</span>
+                <div class="category-filter__list">
+                    <button
+                        v-for="category in categoryOptions"
+                        :key="category"
+                        class="category-filter__item"
+                        :class="{ 'category-filter__item--active': activeCategory === category }"
+                        type="button"
+                        @click="activeCategory = category"
+                    >
+                        {{ category }}
+                    </button>
+                </div>
+            </div>
+            <div class="toolbar-card__actions">
+                <label class="search-box">
+                    <span class="search-box__label">搜索</span>
+                    <input v-model="searchKeyword" class="search-box__input" type="text" placeholder="按标题、摘要或标签检索文章" />
+                </label>
+                <button v-if="hasActiveFilter" class="toolbar-card__reset" type="button" @click="resetFilters">
+                    清空筛选
+                </button>
+            </div>
         </div>
     </section>
 
@@ -123,6 +145,7 @@ onBeforeUnmount(() => {
             <div class="post-card__meta">
                 <span>{{ post.publishedAt }}</span>
                 <span>{{ post.readingTime }}</span>
+                <span>{{ post.category }}</span>
             </div>
             <RouterLink class="post-card__title" :to="`/post/${post.id}`">
                 {{ post.title }}
@@ -135,14 +158,14 @@ onBeforeUnmount(() => {
 
         <div v-if="!filteredPosts.length" class="empty-state">
             <p class="empty-state__title">未找到匹配文章</p>
-            <p class="empty-state__description">可以尝试缩短关键词，或者直接浏览全部历史文章。</p>
-            <button class="empty-state__reset" type="button" @click="resetSearch">返回全部文章</button>
+            <p class="empty-state__description">可以尝试切换标签、缩短关键词，或者直接浏览全部历史文章。</p>
+            <button class="empty-state__reset" type="button" @click="resetFilters">返回全部文章</button>
         </div>
 
         <div ref="sentinel" class="load-status">
             <template v-if="filteredPosts.length">
                 <p v-if="hasMore">继续向下滚动，自动加载更多文章…</p>
-                <p v-else>{{ hasActiveSearch ? '筛选结果已全部展示' : '已经加载完全部文章' }}</p>
+                <p v-else>{{ hasActiveFilter ? '筛选结果已全部展示' : '已经加载完全部文章' }}</p>
             </template>
         </div>
     </section>
@@ -188,7 +211,7 @@ onBeforeUnmount(() => {
 
 .toolbar-card {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
     padding: 20px 22px;
@@ -206,11 +229,18 @@ onBeforeUnmount(() => {
         }
     }
 
+    &__filters {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: min(620px, 100%);
+    }
+
     &__actions {
         display: flex;
         align-items: flex-end;
         gap: 12px;
-        width: min(560px, 100%);
+        width: 100%;
     }
 
     &__reset {
@@ -224,6 +254,51 @@ onBeforeUnmount(() => {
 
         &:hover {
             background: #1e293b;
+        }
+    }
+}
+
+.category-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    &__label {
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    &__list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    &__item {
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: #fff;
+        color: #334155;
+        font-size: 0.9rem;
+        line-height: 1;
+        cursor: pointer;
+        transition:
+            color 0.2s ease,
+            border-color 0.2s ease,
+            background-color 0.2s ease,
+            box-shadow 0.2s ease;
+
+        &:hover {
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+
+        &--active {
+            border-color: #0f172a;
+            background: #0f172a;
+            color: #fff;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
         }
     }
 }
@@ -275,6 +350,7 @@ onBeforeUnmount(() => {
     &__meta {
         display: flex;
         gap: 14px;
+        flex-wrap: wrap;
         font-size: 0.88rem;
         color: #64748b;
     }
@@ -358,10 +434,14 @@ onBeforeUnmount(() => {
         flex-direction: column;
         align-items: stretch;
 
+        &__filters,
+        &__actions {
+            width: 100%;
+        }
+
         &__actions {
             flex-direction: column;
             align-items: stretch;
-            width: 100%;
         }
     }
 }
