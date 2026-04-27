@@ -6,12 +6,17 @@ import { blogPosts } from '@/data/blog-posts'
 import type { BlogFilter } from '@/types/blog'
 
 const categoryOptions: BlogFilter[] = ['全部', '前端', '后端', '其他']
+const batchSize = 3
 const searchKeyword = ref('')
 const activeCategory = ref<BlogFilter>('全部')
+const categoryVisibleCounts = ref<Record<BlogFilter, number>>({
+    全部: batchSize,
+    前端: batchSize,
+    后端: batchSize,
+    其他: batchSize,
+})
 // 当前已渲染的文章数量；首页初次只展示首批数据，后续通过无限滚动逐步增加。
-const visibleCount = ref(3)
-// 每次触底后新增加载的文章数量。
-const batchSize = 3
+const visibleCount = ref(batchSize)
 // 列表底部的哨兵元素，交给 IntersectionObserver 监听是否进入视口。
 const sentinel = ref<HTMLElement | null>(null)
 
@@ -30,7 +35,6 @@ const filteredPosts = computed(() => {
         const matchesCategory = activeCategory.value === '全部' || post.category === activeCategory.value
         const searchableText = [post.title, post.summary, post.tags.join(' ')].join(' ').toLowerCase()
         const matchesKeyword = !keyword || searchableText.includes(keyword)
-
         return matchesCategory && matchesKeyword
     })
 })
@@ -44,17 +48,39 @@ const hasMore = computed(() => visibleCount.value < filteredPosts.value.length)
 const loadMore = () => {
     if (!hasMore.value) return
     visibleCount.value = Math.min(visibleCount.value + batchSize, filteredPosts.value.length)
+    categoryVisibleCounts.value[activeCategory.value] = visibleCount.value
+}
+
+const applyCategory = (category: BlogFilter) => {
+    if (category === activeCategory.value) {
+        return
+    }
+
+    categoryVisibleCounts.value[activeCategory.value] = visibleCount.value
+    activeCategory.value = category
+
+    if (hasActiveSearch.value) {
+        visibleCount.value = batchSize
+        return
+    }
+
+    visibleCount.value = Math.min(categoryVisibleCounts.value[category], filteredPosts.value.length)
 }
 
 const resetFilters = () => {
     searchKeyword.value = ''
     activeCategory.value = '全部'
-    visibleCount.value = batchSize
+    visibleCount.value = Math.min(categoryVisibleCounts.value['全部'], sortedPosts.length)
 }
 
-// 搜索词或分类变化时，重置展示数量，避免沿用旧的滚动进度导致筛选结果显示异常。
-watch([searchKeyword, activeCategory], () => {
-    visibleCount.value = batchSize
+// 搜索词变化时，重置展示数量，避免沿用旧的滚动进度导致筛选结果显示异常。
+watch(searchKeyword, (keyword) => {
+    if (keyword.trim()) {
+        visibleCount.value = batchSize
+        return
+    }
+
+    visibleCount.value = Math.min(categoryVisibleCounts.value[activeCategory.value], filteredPosts.value.length)
 })
 
 // 当筛选结果重新出现数据时，确保至少恢复一批展示内容。
@@ -62,7 +88,7 @@ watch(
     filteredPosts,
     (posts) => {
         if (posts.length > 0 && visibleCount.value === 0) {
-            visibleCount.value = batchSize
+            visibleCount.value = Math.min(batchSize, posts.length)
         }
     },
     { immediate: true },
@@ -116,14 +142,9 @@ onBeforeUnmount(() => {
             <div class="category-filter">
                 <span class="category-filter__label">标签</span>
                 <div class="category-filter__list">
-                    <button
-                        v-for="category in categoryOptions"
-                        :key="category"
-                        class="category-filter__item"
-                        :class="{ 'category-filter__item--active': activeCategory === category }"
-                        type="button"
-                        @click="activeCategory = category"
-                    >
+                    <button v-for="category in categoryOptions" :key="category" class="category-filter__item"
+                        :class="{ 'category-filter__item--active': activeCategory === category }" type="button"
+                        @click="applyCategory(category)">
                         {{ category }}
                     </button>
                 </div>
